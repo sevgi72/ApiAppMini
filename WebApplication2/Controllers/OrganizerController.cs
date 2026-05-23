@@ -27,7 +27,7 @@ namespace WebApplication2.Controllers
         [HttpPost]
         public async Task<IActionResult> Create(OrganizerCreateDto dto)
         {
-            string? fileName = null;
+            string fileName = null;
 
             if (dto.Logo != null)
             {

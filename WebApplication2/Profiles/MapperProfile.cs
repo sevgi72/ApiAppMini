@@ -3,6 +3,7 @@ using System;
 using WebApplication2.Dtos.EventDtos;
 using WebApplication2.Dtos.OrganizerDtos;
 using WebApplication2.Dtos.TicketDtos;
+using WebApplication2.Dtos.User;
 using WebApplication2.Extensions;
 using WebApplication2.Models;
 
@@ -25,9 +26,9 @@ namespace WebApplication2.Profiles
                
             CreateMap<TicketCreateDto,Ticket>();
             CreateMap<OrganizerCreateDto, Organizer>();
-                
 
-            CreateMap<Organizer, OrganizerReturnDto>()
+
+            CreateMap<Organizer, OrganizerReturnDto>();
                  
             CreateMap<Organizer, OrganizerInEventDto>();
 
@@ -41,7 +42,7 @@ namespace WebApplication2.Profiles
                 .ForMember(dest => dest.Organizer, opt => opt.MapFrom(src => src.Organizer));
                 
             CreateMap<Event, EventInOrganizerDto>();
-
+            CreateMap<RegisterDto, AppUser>();
 
         }
     }

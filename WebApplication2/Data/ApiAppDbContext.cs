@@ -1,10 +1,11 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System.Data.Common;
 using WebApplication2.Models;
 
 namespace WebApplication2.Data
 {
-    public class ApiAppDbContext:DbContext
+    public class ApiAppDbContext : IdentityDbContext<AppUser>
     {
         public DbSet<Event> Events { get; set; }
         public DbSet<Ticket> Tickets { get; set; }

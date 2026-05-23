@@ -9,7 +9,7 @@ namespace WebApplication2.Attributes
         {
             Types = types;
         }
-        protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
+        protected override ValidationResult IsValid(object value, ValidationContext validationContext)
         {
             List<IFormFile> f = new List<IFormFile>();
             if (value is IFormFile file)
