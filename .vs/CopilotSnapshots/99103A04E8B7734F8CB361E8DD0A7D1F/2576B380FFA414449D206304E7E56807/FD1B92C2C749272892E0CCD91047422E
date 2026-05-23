@@ -1,0 +1,41 @@
+﻿using AutoMapper;
+using WebApplication2.Dtos.EventDtos;
+using WebApplication2.Dtos.OrganizerDtos;
+using WebApplication2.Dtos.TicketDtos;
+using WebApplication2.Models;
+
+namespace WebApplication2.Profiles
+{
+    public class MapperProfile:Profile
+    {
+        public MapperProfile()
+        {
+
+            CreateMap<EventCreateDto, Event>();
+            CreateMap<TicketCreateDto, Ticket>();
+            CreateMap<OrganizerCreateDto, Organizer>();
+
+            // Response mappings to prevent circular references
+            CreateMap<Event, EventResponseDto>()
+                .ForMember(dest => dest.Organizer, opt => opt.MapFrom(src => new OrganizerBasicDto
+                {
+                    Id = src.Organizer.Id,
+                    Name = src.Organizer.Name,
+                    Email = src.Organizer.Email,
+                    Phone = src.Organizer.Phone,
+                    LogoUrl = src.Organizer.LogoUrl
+                }));
+
+            CreateMap<Organizer, OrganizerResponseDto>()
+                .ForMember(dest => dest.Events, opt => opt.MapFrom(src => src.Events.Select(e => new EventBasicDto
+                {
+                    Id = e.Id,
+                    Title = e.Title,
+                    Description = e.Description,
+                    Date = e.Date,
+                    Location = e.Location,
+                    BannerImageUrl = e.BannerImageUrl
+                }).ToList()));
+        }
+    }
+}

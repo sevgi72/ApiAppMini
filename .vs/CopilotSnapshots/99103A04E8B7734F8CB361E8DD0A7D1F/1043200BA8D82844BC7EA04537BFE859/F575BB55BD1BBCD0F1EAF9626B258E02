@@ -1,0 +1,19 @@
+﻿namespace WebApplication2.Dtos.TicketDtos
+{
+    public class TicketReturnDto
+    {
+        public string Type { get; set; }
+        public decimal Price { get; set; }
+        public int QuantityAvailable { get; set; }
+            public int EventId { get; set; }
+        public EventInTicketDto? Event { get; set; }
+    }
+    public class EventInTicketDto
+    {
+        public string Title { get; set; }
+        public string? Description { get; set; }
+        public DateTime Date { get; set; }
+        public string Location { get; set; }
+        public string? BannerImageUrl { get; set; }
+    }
+}

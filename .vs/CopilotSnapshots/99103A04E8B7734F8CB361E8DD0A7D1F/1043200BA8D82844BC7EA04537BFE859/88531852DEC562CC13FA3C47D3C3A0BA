@@ -1,0 +1,36 @@
+﻿using AutoMapper;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using WebApplication2.Data;
+using WebApplication2.Dtos.TicketDtos;
+using WebApplication2.Models;
+
+namespace WebApplication2.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class TicketController(ApiAppDbContext apiAppDbContext,IMapper mapper) : ControllerBase
+    {
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var tickets = await apiAppDbContext.Tickets
+                    .Include(t => t.Event)
+                .ToListAsync();
+            var ticketDtos=mapper.Map<List<TicketReturnDto>>(tickets);
+            return Ok(ticketDtos);
+        }
+        [HttpPost]
+        public async Task<IActionResult> Create(TicketCreateDto dto)
+        {
+            var eventExists = await apiAppDbContext.Events.AnyAsync(e => e.Id == dto.EventId);
+            if (!eventExists) return NotFound("Event not found");
+            var ticket=mapper.Map<Ticket>(dto);
+
+            apiAppDbContext.Tickets.Add(ticket);
+            await apiAppDbContext.SaveChangesAsync();
+            return Ok(ticket);
+        }
+    }
+}
