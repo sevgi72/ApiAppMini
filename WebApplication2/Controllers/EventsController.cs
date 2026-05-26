@@ -12,21 +12,23 @@ namespace WebApplication2.Controllers
 {
     [ApiController]
     [Route("api/events")]
-    public class EventsController(ApiAppDbContext apiAppDbContext,IMapper mapper) : ControllerBase
+    public class EventsController(ApiAppDbContext apiAppDbContext, IMapper mapper) : ControllerBase
     {
         [HttpGet]
         public async Task<IActionResult> GetAllEvents()
-       {
-           var events = await apiAppDbContext.Events
-                .Include(e => e.Organizer)
-                .ToListAsync();
-            var eventDtos=mapper.Map<List<EventReturnDto>>(events);
+        {
+            var events = await apiAppDbContext.Events
+                 .Include(e => e.Organizer)
+                 .ToListAsync();
+            var eventDtos = mapper.Map<List<EventReturnDto>>(events);
             return Ok(eventDtos);
         }
 
         [HttpPost]
         public async Task<IActionResult> Post(EventCreateDto dto)
         {
+            if (dto == null) return BadRequest("Data cannot be null");
+
             var ev = mapper.Map<Event>(dto);
             apiAppDbContext.Events.Add(ev);
             await apiAppDbContext.SaveChangesAsync();
@@ -42,7 +44,7 @@ namespace WebApplication2.Controllers
             if (!file.IsImage())
                 return BadRequest("Only image files are allowed");
 
-            if (!file.IsValidSize(2)) 
+            if (!file.IsValidSize(2))
                 return BadRequest("File size must be less than 2MB");
 
             var ev = await apiAppDbContext.Events.FindAsync(id);
@@ -50,19 +52,13 @@ namespace WebApplication2.Controllers
                 return NotFound("Event not found");
 
             string rootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/images");
-
-           
             string fileName = await file.SaveFileAsync(rootPath);
 
             ev.BannerImageUrl = fileName;
-
             await apiAppDbContext.SaveChangesAsync();
 
-            return Ok(new
-            {
-                message = "Banner uploaded",
-                file = fileName
-            });
+            // Anonim obyekt əvəzinə birbaşa yenilənmiş eventi qaytarırıq ki, test etmək asan olsun
+            return Ok(ev);
         }
 
         [HttpGet("{eventId}/tickets")]
@@ -82,9 +78,9 @@ namespace WebApplication2.Controllers
         [HttpGet("{eventId}/organizer")]
         public async Task<IActionResult> GetOrganizerByEvent(int eventId)
         {
-                var ev = await apiAppDbContext.Events
-                .Include(e => e.Organizer)
-                .FirstOrDefaultAsync(e => e.Id == eventId);
+            var ev = await apiAppDbContext.Events
+            .Include(e => e.Organizer)
+            .FirstOrDefaultAsync(e => e.Id == eventId);
 
             if (ev == null) return NotFound("Event not found");
             if (ev.Organizer == null) return NotFound("Organizer not found");
@@ -113,6 +109,51 @@ namespace WebApplication2.Controllers
             return Ok(ticket);
         }
 
+        #region YENİ ƏLAVƏ OLUNAN CRUD ENDPOINT-LƏRİ
 
+        // 1. GET BY ID
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var ev = await apiAppDbContext.Events
+                .Include(e => e.Organizer)
+                .FirstOrDefaultAsync(e => e.Id == id);
+
+            if (ev == null) return NotFound("Event not found");
+
+            var dto = mapper.Map<EventReturnDto>(ev);
+            return Ok(dto);
+        }
+
+        // 2. UPDATE (PUT)
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, EventCreateDto dto)
+        {
+            if (dto == null) return BadRequest("Data cannot be null");
+
+            var ev = await apiAppDbContext.Events.FindAsync(id);
+            if (ev == null) return NotFound("Event not found");
+
+            // Mövcud obyektin üzərinə yeni dataları map edirik
+            mapper.Map(dto, ev);
+
+            await apiAppDbContext.SaveChangesAsync();
+            return Ok(ev);
+        }
+
+        // 3. DELETE
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var ev = await apiAppDbContext.Events.FindAsync(id);
+            if (ev == null) return NotFound("Event not found");
+
+            apiAppDbContext.Events.Remove(ev);
+            await apiAppDbContext.SaveChangesAsync();
+
+            return Ok("Event deleted successfully");
+        }
+
+        #endregion
     }
 }

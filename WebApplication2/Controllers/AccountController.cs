@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using System.Security.Claims;
+using System.Text;
 using WebApplication2.Dtos;
 using WebApplication2.Dtos.User;
 using WebApplication2.Models;
@@ -30,30 +32,36 @@ namespace WebApplication2.Controllers
             {
                 return BadRequest(validationResult.Errors);
             }
-            var userExistsByName = await userManager.FindByNameAsync(registerDto.UserName);
-            if (userExistsByName is not null)
+            var user = await userManager.FindByNameAsync(registerDto.UserName);
+            if (user is not null)
             {
-                return BadRequest("Username already exists.");
+                return BadRequest("UserName already exists");
             }
-
-            var userExistsByEmail = await userManager.FindByEmailAsync(registerDto.Email);
-            if (userExistsByEmail is not null)
-            {
-                return BadRequest("Email already exists.");
-            }
-            var user = mapper.Map<AppUser>(registerDto);
+            user = mapper.Map<AppUser>(registerDto);
             var result = await userManager.CreateAsync(user, registerDto.Password);
             if (!result.Succeeded)
             {
                 return BadRequest(result.Errors);
             }
             await userManager.AddToRoleAsync(user, "Member");
-            var emailToken = await userManager.GenerateEmailConfirmationTokenAsync(user);
+            var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
+            var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+
+            var confirmLink = Url.Action(
+                "ConfirmEmail",
+                "Account",
+                new { userId = user.Id, token = encodedToken },
+                Request.Scheme
+            );
+
+
             return Ok(new
             {
-                Message = "User registered successfully. Please confirm your email.",
-                Token = emailToken
+                message = "user registered successfully",
+                confirmLink
             });
+
+
         }
 
         [HttpPost("login")]
@@ -75,12 +83,13 @@ namespace WebApplication2.Controllers
             }
 
             var roles = await userManager.GetRolesAsync(user);
-            var token = jwtService.GenerateToken(user, roles, config);
+            var token = jwtService.GenerateToken(user, roles);
             var refreshToken = Guid.NewGuid().ToString();
             await userManager.SetAuthenticationTokenAsync(user, "ApiApp", "RefreshToken", refreshToken);
 
             return Ok(new
             {
+                //accessToken = jwtService.GenerateToken(user, roles),
                 Token = token,
                 RefreshToken = refreshToken // front bunu yadda saxlayir ve access tokeni bitdikde refresh tokeni ile yeni token isteyir
             });
@@ -152,30 +161,28 @@ namespace WebApplication2.Controllers
 
         //------------------------------------------------------------------------------------
 
+
         [HttpGet("confirm-email")]
-        public async Task<IActionResult> ConfirmEmail([FromQuery] string email, [FromQuery] string token)
+        public async Task<IActionResult> ConfirmEmail(string userId, string token)
         {
-            if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(token))
+            var user = await userManager.FindByIdAsync(userId);
+            if (user is null)
+                return NotFound("User not found");
+            string decodedToken;
+            try
             {
-                return BadRequest("Email and Token cannot be empty.");
+                decodedToken = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(token));
             }
-
-            var user = await userManager.FindByEmailAsync(email);
-            if (user == null)
+            catch (FormatException)
             {
-                return BadRequest("User not found.");
+                return BadRequest("Invalid token format");
             }
+            var result = await userManager.ConfirmEmailAsync(user, decodedToken);
 
-            // identity emaili ve token yoxayir duzgudnursa emaili tesdiqlendirir
-            var result = await userManager.ConfirmEmailAsync(user, token);
+            if (!result.Succeeded)
+                return BadRequest("Invalid token");
 
-            if (result.Succeeded)
-            {
-                return Ok("Your email has been successfully confirmed! You can now log in.");
-            }
-
-            // Tokenin vaxtı keçibsə və ya səhvdirsə
-            return BadRequest("Invalid or expired token.");
+            return Ok("Email confirmed successfully");
         }
 
         //------------------------------------------------------------------------------------------------------------------
@@ -199,7 +206,7 @@ namespace WebApplication2.Controllers
 
            
             var roles = await userManager.GetRolesAsync(user);
-            var newAccessToken = jwtService.GenerateToken(user, roles, config);
+            var newAccessToken = jwtService.GenerateToken(user, roles);
             var newRefreshToken = Guid.NewGuid().ToString();
 
             // refresh token mentiqini burda yaziriq

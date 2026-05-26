@@ -1,0 +1,202 @@
+﻿using AutoMapper;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Moq;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
+using WebApplication2.Controllers;
+using WebApplication2.Data;
+using WebApplication2.Dtos.EventDtos;
+using WebApplication2.Dtos.TicketDtos;
+using WebApplication2.Models;
+using Xunit;
+
+namespace TestProject.ControllerTest
+{
+    public class EventsControllerTests
+    {
+        private readonly ApiAppDbContext _context;
+        private readonly IMapper _mapper;
+
+        public EventsControllerTests()
+        {
+            // 1. Hər test üçün unikal InMemory Database yaradırıq
+            var options = new DbContextOptionsBuilder<ApiAppDbContext>()
+                .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+                .Options;
+
+            _context = new ApiAppDbContext(options);
+
+            // 2. ERRORU HƏLL EDƏN AUTOMAPPER SETUP
+            // typeof(Program) yerinə birbaşa test layihəsinin tanıdığı EventReturnDto-nun aid olduğu layihəni (Assembly) skan edirik.
+            var myProfile = new MapperConfiguration(cfg =>
+            {
+                cfg.AddMaps(typeof(EventReturnDto).Assembly);
+            });
+
+            _mapper = myProfile.CreateMapper();
+        }
+
+        #region GetAllEvents Tests
+
+        [Fact]
+        public async Task GetAllEvents_ReturnsOkResult_WithListOfEvents()
+        {
+            // Arrange
+            var organizer = new Organizer { Id = 1, Name = "Test Organizer" };
+            _context.Organizers.Add(organizer);
+
+            _context.Events.Add(new Event
+            {
+                Id = 1,
+                Title = "Tech Conference",
+                Description = "Tech details",
+                Location = "Baku",
+                Date = DateTime.Now.AddDays(5),
+                OrganizerId = 1
+            });
+            await _context.SaveChangesAsync();
+
+            var controller = new EventsController(_context, _mapper);
+
+            // Act
+            var result = await controller.GetAllEvents();
+
+            // Assert
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var returnedEvents = Assert.IsAssignableFrom<List<EventReturnDto>>(okResult.Value);
+            Assert.Single(returnedEvents);
+        }
+
+        #endregion
+
+        #region Post (Create Event) Tests
+
+        [Fact]
+        public async Task Post_ReturnsOkResult_AndSavesEventToDatabase()
+        {
+            // Arrange
+            var controller = new EventsController(_context, _mapper);
+            var dto = new EventCreateDto
+            {
+                Title = "New Music Festival",
+                Description = "Jazz night",
+                Location = "Baku",
+                Date = DateTime.Now.AddDays(10),
+                OrganizerId = 1
+            };
+
+            // Act
+            var result = await controller.Post(dto);
+
+            // Assert
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var createdEvent = Assert.IsType<Event>(okResult.Value);
+
+            var eventInDb = await _context.Events.FindAsync(createdEvent.Id);
+            Assert.NotNull(eventInDb);
+            Assert.Equal("New Music Festival", eventInDb.Title);
+        }
+
+        #endregion
+
+        #region UploadBanner Tests (Unit & Edge Cases)
+
+        [Fact]
+        public async Task UploadBanner_ReturnsBadRequest_WhenFileIsNull()
+        {
+            // Arrange
+            var controller = new EventsController(_context, _mapper);
+
+            // Act
+            var result = await controller.UploadBanner(1, null);
+
+            // Assert
+            var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
+            Assert.Equal("File is required", badRequestResult.Value);
+        }
+
+        [Fact]
+        public async Task UploadBanner_ReturnsNotFound_WhenEventDoesNotExist()
+        {
+            // Arrange
+            var controller = new EventsController(_context, _mapper);
+
+            var fileMock = new Mock<IFormFile>();
+            var content = "Fake Image Content";
+            var fileName = "banner.jpg";
+            using var ms = new MemoryStream();
+            using var writer = new StreamWriter(ms);
+            writer.Write(content);
+            writer.Flush();
+            ms.Position = 0;
+
+            fileMock.Setup(_ => _.OpenReadStream()).Returns(ms);
+            fileMock.Setup(_ => _.FileName).Returns(fileName);
+            fileMock.Setup(_ => _.Length).Returns(ms.Length);
+            fileMock.Setup(_ => _.ContentType).Returns("image/jpeg");
+
+            // Act
+            var result = await controller.UploadBanner(999, fileMock.Object);
+
+            // Assert
+            var notFoundResult = Assert.IsType<NotFoundObjectResult>(result);
+            Assert.Equal("Event not found", notFoundResult.Value);
+        }
+
+        #endregion
+
+        #region GetTicketsByEvent Tests
+
+        [Fact]
+        public async Task GetTicketsByEvent_ReturnsNotFound_WhenEventDoesNotExist()
+        {
+            // Arrange
+            var controller = new EventsController(_context, _mapper);
+
+            // Act
+            var result = await controller.GetTicketsByEvent(888);
+
+            // Assert
+            var notFoundResult = Assert.IsType<NotFoundObjectResult>(result);
+            Assert.Equal("Event not found", notFoundResult.Value);
+        }
+
+        #endregion
+
+        #region CreateTicketForEvent Tests
+
+        [Fact]
+        public async Task CreateTicketForEvent_ReturnsOkResult_AndAddsTicketToDb()
+        {
+            // Arrange
+            _context.Events.Add(new Event { Id = 5, Title = "StandUp Show", Location = "Baku", Description = "Comedy" });
+            await _context.SaveChangesAsync();
+
+            var controller = new EventsController(_context, _mapper);
+            var ticketDto = new TicketCreateDto
+            {
+                Type = "VIP",
+                Price = 100,
+                QuantityAvailable = 20
+            };
+
+            // Act
+            var result = await controller.CreateTicketForEvent(5, ticketDto);
+
+            // Assert
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var createdTicket = Assert.IsType<Ticket>(okResult.Value);
+
+            var ticketInDb = await _context.Tickets.FirstOrDefaultAsync(t => t.Id == createdTicket.Id);
+            Assert.NotNull(ticketInDb);
+            Assert.Equal(5, ticketInDb.EventId);
+            Assert.Equal("VIP", ticketInDb.Type);
+        }
+
+        #endregion
+    }
+}

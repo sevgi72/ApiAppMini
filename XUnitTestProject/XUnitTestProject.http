@@ -1,0 +1,6 @@
+@XUnitTestProject_HostAddress = http://localhost:5181
+
+GET {{XUnitTestProject_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
