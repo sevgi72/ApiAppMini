@@ -1,4 +1,4 @@
-# 🎫 Event Management API - WebApplication2
+# 🎫 Event Management API - WebApplication
 
 A comprehensive ASP.NET Core Web API for managing events, organizers, and tickets with full test coverage.
 
