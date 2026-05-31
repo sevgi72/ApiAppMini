@@ -7,7 +7,7 @@ namespace WebApplication2.Dtos.OrganizerDtos
         public string Name { get; set; }
         public string Email { get; set; }
         public string Phone { get; set; }
-        public IFormFile Logo { get; set; }
+        //public IFormFile Logo { get; set; }
     }
     public class Validator : AbstractValidator<OrganizerCreateDto>
     {
@@ -27,8 +27,8 @@ namespace WebApplication2.Dtos.OrganizerDtos
                 .Matches(@"^\+994\d{9}$")
                 .WithMessage("Phone must be in +994XXXXXXXXX format.");
 
-            RuleFor(x => x.Logo)
-                .NotNull().WithMessage("Logo is required.");
+            //RuleFor(x => x.Logo)
+            //    .NotNull().WithMessage("Logo is required.");
 
             //RuleFor(x => x.Logo.Length)
             //    .LessThanOrEqualTo(2 * 1024 * 1024)

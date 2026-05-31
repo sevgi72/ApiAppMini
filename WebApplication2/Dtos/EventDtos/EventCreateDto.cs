@@ -9,7 +9,7 @@ namespace WebApplication2.Dtos.EventDtos
         public DateTime Date { get; set; }
         public string Location { get; set; }= null!;
         public int OrganizerId { get; set; }
-        public IFormFile Photo { get; set; }= null!;
+        //public IFormFile Photo { get; set; }= null!;
     }
     public class EventCreateDtoValidator : AbstractValidator<EventCreateDto>
     {
@@ -38,8 +38,8 @@ namespace WebApplication2.Dtos.EventDtos
                 .GreaterThan(0)
                 .WithMessage("Invalid organizer id.");
 
-            RuleFor(x => x.Photo)
-                .NotNull().WithMessage("Photo is required.");
+            //RuleFor(x => x.Photo)
+            //    .NotNull().WithMessage("Photo is required.");
 
             //RuleFor(x => x.Photo.Length)
             //    .LessThanOrEqualTo(5 * 1024 * 1024)

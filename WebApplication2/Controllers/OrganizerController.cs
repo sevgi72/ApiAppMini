@@ -27,16 +27,16 @@ namespace WebApplication2.Controllers
         [HttpPost]
         public async Task<IActionResult> Create(OrganizerCreateDto dto)
         {
-            string fileName = null;
+            //string fileName = null;
 
-            if (dto.Logo != null)
-            {
-                if (!dto.Logo.IsImage()) return BadRequest("Only image files are allowed");
-                if (!dto.Logo.IsValidSize(5)) return BadRequest("File size must not exceed 5MB");
+            //if (dto.Logo != null)
+            //{
+            //    if (!dto.Logo.IsImage()) return BadRequest("Only image files are allowed");
+            //    if (!dto.Logo.IsValidSize(5)) return BadRequest("File size must not exceed 5MB");
 
-                string rootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images");
-                fileName = await dto.Logo.SaveFileAsync(rootPath);
-            }
+            //    string rootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images");
+            //    fileName = await dto.Logo.SaveFileAsync(rootPath);
+            //}
             var organizer = mapper.Map<Organizer>(dto);
 
             apiAppDbContext.Organizers.Add(organizer);

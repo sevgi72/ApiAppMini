@@ -1,0 +1,355 @@
+﻿using AutoMapper;
+using FluentValidation;
+using FluentValidation.Results;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.Configuration;
+using Moq;
+using System;
+using System.Collections.Generic;
+using System.Security.Claims;
+using System.Text;
+using System.Threading.Tasks;
+using WebApplication2;
+using WebApplication2.Controllers;
+using WebApplication2.Dtos;
+using WebApplication2.Dtos.User;
+using WebApplication2.Models;
+using Xunit;
+
+namespace TestProject.ControllerTest
+{
+    public class AccountControllerTests
+    {
+        private readonly Mock<IValidator<RegisterDto>> _mockValidator;
+        private readonly Mock<UserManager<AppUser>> _mockUserManager;
+        private readonly Mock<RoleManager<IdentityRole>> _mockRoleManager;
+        private readonly Mock<IMapper> _mockMapper;
+        private readonly Mock<IConfiguration> _mockConfig;
+        private readonly Mock<JwtService> _mockJwtService;
+
+        public AccountControllerTests()
+        {
+            _mockValidator = new Mock<IValidator<RegisterDto>>();
+
+            // Identity-ni simulyasiya etmək üçün lazım olan əsas Mock obyektləri
+            var userStoreMock = new Mock<IUserStore<AppUser>>();
+            _mockUserManager = new Mock<UserManager<AppUser>>(userStoreMock.Object, null, null, null, null, null, null, null, null);
+
+            var roleStoreMock = new Mock<IRoleStore<IdentityRole>>();
+            _mockRoleManager = new Mock<RoleManager<IdentityRole>>(roleStoreMock.Object, null, null, null, null);
+
+            _mockMapper = new Mock<IMapper>();
+            _mockConfig = new Mock<IConfiguration>();
+            _mockJwtService = new Mock<JwtService>(_mockConfig.Object);
+        }
+
+        #region 1. REGISTER METODU TESTLƏRİ
+
+        [Fact]
+        public async Task Register_ReturnsBadRequest_WhenValidationFails()
+        {
+            // 1. Yoxlama: FluentValidation-dan keçməyəndə BadRequest qaytarırmı?
+            var dto = new RegisterDto { UserName = "" };
+            var validationFail = new ValidationResult(new List<ValidationFailure> { new ValidationFailure("UserName", "Required") });
+            _mockValidator.Setup(v => v.Validate(dto)).Returns(validationFail);
+
+            var controller = CreateControllerInstance();
+            var result = await controller.Register(dto);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task Register_ReturnsBadRequest_WhenUsernameAlreadyExists()
+        {
+            // 2. Yoxlama: Username artıq sistemdə varsa BadRequest qaytarırmı?
+            var dto = new RegisterDto { UserName = "existingUser" };
+            _mockValidator.Setup(v => v.Validate(dto)).Returns(new ValidationResult());
+            _mockUserManager.Setup(m => m.FindByNameAsync(dto.UserName)).ReturnsAsync(new AppUser());
+
+            var controller = CreateControllerInstance();
+            var result = await controller.Register(dto);
+
+            var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+            Assert.Equal("UserName already exists", badRequest.Value);
+        }
+
+        [Fact]
+        public async Task Register_ReturnsBadRequest_WhenIdentityCreateFails()
+        {
+            // 3. Yoxlama: Baza səviyyəsində user yaradıla bilməyəndə (məs. zəif şifrə) Identity xətalarını qaytarırmı?
+            var dto = new RegisterDto { UserName = "newuser", Password = "123" };
+            var appUser = new AppUser { UserName = "newuser" };
+            _mockValidator.Setup(v => v.Validate(dto)).Returns(new ValidationResult());
+            _mockUserManager.Setup(m => m.FindByNameAsync(dto.UserName)).ReturnsAsync((AppUser)null);
+            _mockMapper.Setup(m => m.Map<AppUser>(dto)).Returns(appUser);
+
+            var identityError = IdentityResult.Failed(new IdentityError { Description = "Password too short" });
+            _mockUserManager.Setup(m => m.CreateAsync(appUser, dto.Password)).ReturnsAsync(identityError);
+
+            var controller = CreateControllerInstance();
+            var result = await controller.Register(dto);
+
+            Assert.IsType<BadRequestObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task Register_ReturnsOk_WithConfirmLink_WhenSuccessful()
+        {
+            // 4. Yoxlama: Hər şey düzgün olanda 200 OK və confirmLink qaytarırmı?
+            var dto = new RegisterDto { UserName = "validuser", Password = "Password123!" };
+            var appUser = new AppUser { Id = "id-1", UserName = "validuser" };
+            _mockValidator.Setup(v => v.Validate(dto)).Returns(new ValidationResult());
+            _mockUserManager.Setup(m => m.FindByNameAsync(dto.UserName)).ReturnsAsync((AppUser)null);
+            _mockMapper.Setup(m => m.Map<AppUser>(dto)).Returns(appUser);
+            _mockUserManager.Setup(m => m.CreateAsync(appUser, dto.Password)).ReturnsAsync(IdentityResult.Success);
+            _mockUserManager.Setup(m => m.AddToRoleAsync(appUser, "Member")).ReturnsAsync(IdentityResult.Success);
+            _mockUserManager.Setup(m => m.GenerateEmailConfirmationTokenAsync(appUser)).ReturnsAsync("token123");
+
+            var controller = CreateControllerInstance();
+            SetupUrlHelper(controller);
+
+            var result = await controller.Register(dto);
+
+            Assert.IsType<OkObjectResult>(result);
+        }
+
+        #endregion
+
+        #region 2. LOGIN METODU TESTLƏRİ
+
+        [Fact]
+        public async Task Login_ReturnsBadRequest_WhenUserNotFound()
+        {
+            // 5. Yoxlama: İstifadəçi adı və ya Email səhv olanda xəta verirmi?
+            var dto = new LoginDto { Username = "wronguser" };
+            _mockUserManager.Setup(m => m.FindByNameAsync(dto.Username)).ReturnsAsync((AppUser)null);
+            _mockUserManager.Setup(m => m.FindByEmailAsync(dto.Username)).ReturnsAsync((AppUser)null);
+
+            var controller = CreateControllerInstance();
+            var result = await controller.Login(dto);
+
+            var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+            Assert.Equal("invalid username or password", badRequest.Value);
+        }
+
+        [Fact]
+        public async Task Login_ReturnsBadRequest_WhenPasswordIsIncorrect()
+        {
+            // 6. Yoxlama: Şifrə səhv yazılanda xəta verirmi?
+            var dto = new LoginDto { Username = "user", Password = "wrongpassword" };
+            var appUser = new AppUser { UserName = "user" };
+            _mockUserManager.Setup(m => m.FindByNameAsync(dto.Username)).ReturnsAsync(appUser);
+            _mockUserManager.Setup(m => m.CheckPasswordAsync(appUser, dto.Password)).ReturnsAsync(false);
+
+            var controller = CreateControllerInstance();
+            var result = await controller.Login(dto);
+
+            var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+            Assert.Equal("invalid username or password", badRequest.Value);
+        }
+
+        [Fact]
+        public async Task Login_ReturnsBadRequest_WhenEmailNotConfirmed()
+        {
+            // 7. Yoxlama: Email təsdiqlənməyibsə girişə icazə vermirmi?
+            var dto = new LoginDto { Username = "user", Password = "Correct123!" };
+            var appUser = new AppUser { UserName = "user", EmailConfirmed = false };
+            _mockUserManager.Setup(m => m.FindByNameAsync(dto.Username)).ReturnsAsync(appUser);
+            _mockUserManager.Setup(m => m.CheckPasswordAsync(appUser, dto.Password)).ReturnsAsync(true);
+
+            var controller = CreateControllerInstance();
+            var result = await controller.Login(dto);
+
+            var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+            Assert.Equal("Please confirm your email.", badRequest.Value);
+        }
+
+        [Fact]
+        
+        public async Task Login_ReturnsOk_WithTokens_WhenSuccessful()
+        {
+            // Arrange
+            var dto = new LoginDto { Username = "user", Password = "Correct123!" };
+            var appUser = new AppUser { UserName = "user", EmailConfirmed = true };
+
+            _mockUserManager.Setup(m => m.FindByNameAsync(dto.Username)).ReturnsAsync(appUser);
+            _mockUserManager.Setup(m => m.CheckPasswordAsync(appUser, dto.Password)).ReturnsAsync(true);
+            _mockUserManager.Setup(m => m.GetRolesAsync(appUser)).ReturnsAsync(new List<string> { "Member" });
+
+            // Çatışmayan Hissə: JwtService metodlarını mock edirik ki, null qaytarmasınlar
+            _mockJwtService.Setup(j => j.GenerateToken(appUser, It.IsAny<IList<string>>())).Returns("mock-access-token");
+            _mockJwtService.Setup(j => j.GenerateRefreshToken()).Returns("mock-refresh-token");
+
+            var controller = CreateControllerInstance();
+
+            // Act
+            var result = await controller.Login(dto);
+
+            // Assert
+            var okResult = Assert.IsType<OkObjectResult>(result);
+
+            // Çatışmayan Hissə: Gələn datanın strukturunu və dəyərlərini yoxlayırıq
+            var responseData = okResult.Value;
+            Assert.NotNull(responseData);
+
+            // Reflection və ya JSON serialization ilə dəyərləri dəqiq yoxlamaq üçün:
+            var tokenProp = responseData.GetType().GetProperty("token")?.GetValue(responseData)?.ToString();
+            var refreshTokenProp = responseData.GetType().GetProperty("refreshToken")?.GetValue(responseData)?.ToString();
+
+            Assert.Equal("mock-access-token", tokenProp);
+            Assert.Equal("mock-refresh-token", refreshTokenProp);
+        }
+
+        #endregion
+
+        #region 3. PROFILE METODU TESTLƏRİ
+
+        [Fact]
+        public void Profile_ReturnsOk_WithUserClaims()
+        {
+            // 9. Yoxlama: Giriş etmiş istifadəçinin profil məlumatları düzgün oxunurmu?
+            var controller = CreateControllerInstance();
+
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, "user-id-123"),
+                new Claim(ClaimTypes.Name, "testuser"),
+                new Claim("Fullname", "John Doe"),
+                new Claim(ClaimTypes.Role, "Member")
+            };
+            var identity = new ClaimsIdentity(claims, "TestAuth");
+            var claimsPrincipal = new ClaimsPrincipal(identity);
+
+            controller.ControllerContext.HttpContext.User = claimsPrincipal;
+
+            var result = controller.Profile();
+
+            Assert.IsType<OkObjectResult>(result);
+        }
+
+        #endregion
+
+        #region 4. FORGOT PASSWORD TESTLƏRİ
+
+        [Fact]
+        public async Task ForgotPassword_ReturnsOk_EvenIfUserDoesNotExist()
+        {
+            // 10. Yoxlama: Təhlükəsizlik üçün email tapılmayanda da "Token göndərildi" mesajı gəlirmi?
+            var dto = new ForgotPasswordDto { Email = "notfound@test.com" };
+            _mockUserManager.Setup(m => m.FindByEmailAsync(dto.Email)).ReturnsAsync((AppUser)null);
+
+            var controller = CreateControllerInstance();
+            var result = await controller.ForgotPassword(dto);
+
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            Assert.Contains("a password reset token has been sent", okResult.Value.ToString());
+        }
+
+        #endregion
+
+        #region 5. RESET PASSWORD TESTLƏRİ
+
+        [Fact]
+        public async Task ResetPassword_ReturnsBadRequest_WhenPasswordsDoNotMatch()
+        {
+            // 11. Yoxlama: Şifrələr bir-biri ilə eyni olmayanda BadRequest verirmi?
+            var dto = new ResetPasswordDto { NewPassword = "123", ConfirmNewPassword = "456" };
+            var controller = CreateControllerInstance();
+
+            var result = await controller.ResetPassword(dto);
+
+            var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+            Assert.Equal("Passwords do not match.", badRequest.Value);
+        }
+
+        #endregion
+
+        #region 6. CONFIRM EMAIL TESTLƏRİ
+
+        [Fact]
+        public async Task ConfirmEmail_ReturnsNotFound_WhenUserDoesNotExist()
+        {
+            // 12. Yoxlama: Səhv UserId gələndə NotFound verirmi?
+            _mockUserManager.Setup(m => m.FindByIdAsync("wrong-id")).ReturnsAsync((AppUser)null);
+            var controller = CreateControllerInstance();
+
+            var result = await controller.ConfirmEmail("wrong-id", "any-token");
+
+            Assert.IsType<NotFoundObjectResult>(result);
+        }
+
+        [Fact]
+        public async Task ConfirmEmail_ReturnsBadRequest_WhenTokenFormatIsInvalid()
+        {
+            // 13. Yoxlama: Base64Url formatında olmayan xarab token gələndə sistem çökmədən "Invalid token format" verirmi?
+            var appUser = new AppUser { Id = "user-1" };
+            _mockUserManager.Setup(m => m.FindByIdAsync("user-1")).ReturnsAsync(appUser);
+
+            var controller = CreateControllerInstance();
+            var result = await controller.ConfirmEmail("user-1", "!!!XARAB-TOKEN!!!");
+
+            var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+            Assert.Equal("Invalid token format", badRequest.Value);
+        }
+
+        #endregion
+
+        #region 7. REFRESH TOKEN TESTLƏRİ
+
+        [Fact]
+        public async Task RefreshToken_ReturnsBadRequest_WhenDbTokenDoesNotMatch()
+        {
+            // 14. Yoxlama: Gələn Refresh Token bazadakı ilə eyni olmayanda sistem qapını bağlayırmı?
+            var dto = new RefreshTokenDto { Username = "user", RefreshToken = "client-token" };
+            var appUser = new AppUser { UserName = "user" };
+
+            _mockUserManager.Setup(m => m.FindByNameAsync(dto.Username)).ReturnsAsync(appUser);
+            _mockUserManager.Setup(m => m.GetAuthenticationTokenAsync(appUser, "ApiApp", "RefreshToken")).ReturnsAsync("different-db-token");
+
+            var controller = CreateControllerInstance();
+            var result = await controller.RefreshToken(dto);
+
+            var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+            Assert.Equal("Unacceptable refresh token.", badRequest.Value);
+        }
+
+        #endregion
+
+        #region MOCK HELPERS
+
+        private AccountController CreateControllerInstance()
+        {
+            var controller = new AccountController(
+                _mockValidator.Object,
+                _mockUserManager.Object,
+                _mockRoleManager.Object,
+                _mockMapper.Object,
+                _mockConfig.Object,
+                _mockJwtService.Object
+            );
+
+            var httpContext = new DefaultHttpContext();
+            httpContext.Request.Scheme = "https";
+            controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = httpContext
+            };
+
+            return controller;
+        }
+
+        private void SetupUrlHelper(AccountController controller)
+        {
+            var urlHelperMock = new Mock<IUrlHelper>();
+            urlHelperMock.Setup(x => x.Action(It.IsAny<UrlActionContext>())).Returns("https://localhost/api/Account/confirm-email");
+            controller.Url = urlHelperMock.Object;
+        }
+
+        #endregion
+    }
+}

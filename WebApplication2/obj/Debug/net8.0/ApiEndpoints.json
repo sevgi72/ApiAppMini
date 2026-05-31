@@ -129,34 +129,9 @@
     "Order": 0,
     "Parameters": [
       {
-        "Name": "Title",
-        "Type": "System.String",
-        "IsRequired": false
-      },
-      {
-        "Name": "Description",
-        "Type": "System.String",
-        "IsRequired": false
-      },
-      {
-        "Name": "Date",
-        "Type": "System.DateTime",
-        "IsRequired": false
-      },
-      {
-        "Name": "Location",
-        "Type": "System.String",
-        "IsRequired": false
-      },
-      {
-        "Name": "OrganizerId",
-        "Type": "System.Int32",
-        "IsRequired": false
-      },
-      {
-        "Name": "Photo",
-        "Type": "Microsoft.AspNetCore.Http.IFormFile",
-        "IsRequired": false
+        "Name": "dto",
+        "Type": "WebApplication2.Dtos.EventDtos.EventCreateDto",
+        "IsRequired": true
       }
     ],
     "ReturnTypes": []
@@ -244,34 +219,9 @@
         "IsRequired": true
       },
       {
-        "Name": "Title",
-        "Type": "System.String",
-        "IsRequired": false
-      },
-      {
-        "Name": "Description",
-        "Type": "System.String",
-        "IsRequired": false
-      },
-      {
-        "Name": "Date",
-        "Type": "System.DateTime",
-        "IsRequired": false
-      },
-      {
-        "Name": "Location",
-        "Type": "System.String",
-        "IsRequired": false
-      },
-      {
-        "Name": "OrganizerId",
-        "Type": "System.Int32",
-        "IsRequired": false
-      },
-      {
-        "Name": "Photo",
-        "Type": "Microsoft.AspNetCore.Http.IFormFile",
-        "IsRequired": false
+        "Name": "dto",
+        "Type": "WebApplication2.Dtos.EventDtos.EventCreateDto",
+        "IsRequired": true
       }
     ],
     "ReturnTypes": []
@@ -332,24 +282,9 @@
     "Order": 0,
     "Parameters": [
       {
-        "Name": "Name",
-        "Type": "System.String",
-        "IsRequired": false
-      },
-      {
-        "Name": "Email",
-        "Type": "System.String",
-        "IsRequired": false
-      },
-      {
-        "Name": "Phone",
-        "Type": "System.String",
-        "IsRequired": false
-      },
-      {
-        "Name": "Logo",
-        "Type": "Microsoft.AspNetCore.Http.IFormFile",
-        "IsRequired": false
+        "Name": "dto",
+        "Type": "WebApplication2.Dtos.OrganizerDtos.OrganizerCreateDto",
+        "IsRequired": true
       }
     ],
     "ReturnTypes": []

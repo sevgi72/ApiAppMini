@@ -40,10 +40,8 @@ namespace WebApplication2.Controllers
         {
             if (file == null)
                 return BadRequest("File is required");
-
             if (!file.IsImage())
                 return BadRequest("Only image files are allowed");
-
             if (!file.IsValidSize(2))
                 return BadRequest("File size must be less than 2MB");
 
@@ -57,8 +55,8 @@ namespace WebApplication2.Controllers
             ev.BannerImageUrl = fileName;
             await apiAppDbContext.SaveChangesAsync();
 
-            // Anonim obyekt əvəzinə birbaşa yenilənmiş eventi qaytarırıq ki, test etmək asan olsun
-            return Ok(ev);
+            var dto = mapper.Map<EventReturnDto>(ev);  // ✅ DTO-ya map et — URL tam gələcək
+            return Ok(dto);
         }
 
         [HttpGet("{eventId}/tickets")]
