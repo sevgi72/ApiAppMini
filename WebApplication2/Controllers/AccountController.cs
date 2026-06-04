@@ -1,12 +1,12 @@
 ﻿using AutoMapper;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using System.Security.Claims;
 using System.Text;
+using WebApplication2.Common;
 using WebApplication2.Dtos;
 using WebApplication2.Dtos.User;
 using WebApplication2.Models;
@@ -30,19 +30,22 @@ namespace WebApplication2.Controllers
             var validationResult = validator.Validate(registerDto);
             if (!validationResult.IsValid)
             {
-                return BadRequest(validationResult.Errors);
+                var errors = validationResult.Errors.Select(e => e.ErrorMessage).ToList();
+                return BadRequest(ApiResponse<object>.Fail(errors));
             }
+
             var user = await userManager.FindByNameAsync(registerDto.UserName);
             if (user is not null)
-            {
-                return BadRequest("UserName already exists");
-            }
+                return BadRequest(ApiResponse<object>.Fail("UserName already exists"));
+
             user = mapper.Map<AppUser>(registerDto);
             var result = await userManager.CreateAsync(user, registerDto.Password);
             if (!result.Succeeded)
             {
-                return BadRequest(result.Errors);
+                var errors = result.Errors.Select(e => e.Description).ToList();
+                return BadRequest(ApiResponse<object>.Fail(errors));
             }
+
             await userManager.AddToRoleAsync(user, "Member");
             var token = await userManager.GenerateEmailConfirmationTokenAsync(user);
             var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
@@ -54,14 +57,7 @@ namespace WebApplication2.Controllers
                 Request.Scheme
             );
 
-
-            return Ok(new
-            {
-                message = "user registered successfully",
-                confirmLink
-            });
-
-
+            return Ok(ApiResponse<object>.Ok(new { confirmLink }, "User registered successfully"));
         }
 
         [HttpPost("login")]
@@ -71,103 +67,83 @@ namespace WebApplication2.Controllers
                        ?? await userManager.FindByEmailAsync(loginDto.Username);
 
             if (user is null)
-                return BadRequest("invalid username or password");
+                return BadRequest(ApiResponse<AuthResponseDto>.Fail("Invalid username or password"));
 
             var result = await userManager.CheckPasswordAsync(user, loginDto.Password);
             if (!result)
-                return BadRequest("invalid username or password");
+                return BadRequest(ApiResponse<AuthResponseDto>.Fail("Invalid username or password"));
 
             if (!user.EmailConfirmed)
-            {
-                return BadRequest("Please confirm your email.");
-            }
+                return BadRequest(ApiResponse<AuthResponseDto>.Fail("Please confirm your email."));
 
             var roles = await userManager.GetRolesAsync(user);
             var token = jwtService.GenerateToken(user, roles);
             var refreshToken = Guid.NewGuid().ToString();
             await userManager.SetAuthenticationTokenAsync(user, "ApiApp", "RefreshToken", refreshToken);
 
-            return Ok(new
+            var authResponse = new AuthResponseDto
             {
-                //accessToken = jwtService.GenerateToken(user, roles),
                 Token = token,
-                RefreshToken = refreshToken // front bunu yadda saxlayir ve access tokeni bitdikde refresh tokeni ile yeni token isteyir
-            });
+                RefreshToken = refreshToken
+            };
+
+            return Ok(ApiResponse<AuthResponseDto>.Ok(authResponse, "Login successful"));
         }
+
         [HttpGet]
         [Authorize]
         public IActionResult Profile()
         {
-            //useauthenticate middlewaresi ile userin icindeki melumatlar doldurulur
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var username = User.Identity?.Name;
             var fullname = User.FindFirstValue("Fullname");
             var roles = User.FindAll(ClaimTypes.Role).Select(r => r.Value).ToList();
-            return Ok(new
-            {
-                userId,
-                username,
-                fullname,
-                roles
-            });
+
+            var data = new { userId, username, fullname, roles };
+            return Ok(ApiResponse<object>.Ok(data));
         }
 
-        //---------------------------------------------------------------------------------------
-
-
-
-    
         [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
         {
             var user = await userManager.FindByEmailAsync(dto.Email);
             if (user == null)
             {
-                return Ok("If the email exists in the system, a password reset token has been sent.");
+                // Təhlükəsizlik üçün eyni mesaj qaytarılır (user var/yox bilinməsin)
+                return Ok(ApiResponse<object>.Ok(null, "If the email exists in the system, a password reset token has been sent."));
             }
-            // identity unique token yardir ve bu tokenin vaxti var, real isde emaile gedir, test ucun response da qaytaririq
+
             var token = await userManager.GeneratePasswordResetTokenAsync(user);
-            return Ok(new { Message = "Token created successfully.", Token = token });
+            return Ok(ApiResponse<object>.Ok(new { Token = token }, "Token created successfully."));
         }
-
-
-
 
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
         {
             if (dto.NewPassword != dto.ConfirmNewPassword)
-            {
-                return BadRequest("Passwords do not match.");
-            }
+                return BadRequest(ApiResponse<object>.Fail("Passwords do not match."));
 
             var user = await userManager.FindByEmailAsync(dto.Email);
             if (user == null)
-            {
-                return BadRequest("User not found.");
-            }
+                return BadRequest(ApiResponse<object>.Fail("User not found."));
 
-            // identity tokeni yoxlayir duzdurse ve vaxti kecmemisdirse yeni sifre ile resetleyir
             var result = await userManager.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
-
-            if (result.Succeeded)
+            if (!result.Succeeded)
             {
-                return Ok("Your password has been successfully reset.");
+                var errors = result.Errors.Select(e => e.Description).ToList();
+                return BadRequest(ApiResponse<object>.Fail(errors));
             }
 
-            
-            return BadRequest(result.Errors);
+            return Ok(ApiResponse<object>.Ok(null, "Your password has been successfully reset."));
         }
-
-        //------------------------------------------------------------------------------------
-
 
         [HttpGet("confirm-email")]
         public async Task<IActionResult> ConfirmEmail(string userId, string token)
         {
             var user = await userManager.FindByIdAsync(userId);
             if (user is null)
-                return NotFound("User not found");
+                return NotFound(ApiResponse<object>.Fail("User not found"));
+
             string decodedToken;
             try
             {
@@ -175,58 +151,41 @@ namespace WebApplication2.Controllers
             }
             catch (FormatException)
             {
-                return BadRequest("Invalid token format");
+                return BadRequest(ApiResponse<object>.Fail("Invalid token format"));
             }
+
             var result = await userManager.ConfirmEmailAsync(user, decodedToken);
-
             if (!result.Succeeded)
-                return BadRequest("Invalid token");
+                return BadRequest(ApiResponse<object>.Fail("Invalid token"));
 
-            return Ok("Email confirmed successfully");
+            return Ok(ApiResponse<object>.Ok(null, "Email confirmed successfully"));
         }
-
-        //------------------------------------------------------------------------------------------------------------------
-
 
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenDto dto)
         {
             var user = await userManager.FindByNameAsync(dto.Username)
                        ?? await userManager.FindByEmailAsync(dto.Username);
-            if (user == null) return BadRequest("User not found.");
+            if (user == null)
+                return BadRequest(ApiResponse<AuthResponseDto>.Fail("User not found."));
 
-            // saved dbdaki tokeni oxuyuruq
             var savedRefreshToken = await userManager.GetAuthenticationTokenAsync(user, "ApiApp", "RefreshToken");
-
-           
             if (savedRefreshToken != dto.RefreshToken)
-            {
-                return BadRequest("Unacceptable refresh token.");
-            }
+                return BadRequest(ApiResponse<AuthResponseDto>.Fail("Unacceptable refresh token."));
 
-           
             var roles = await userManager.GetRolesAsync(user);
             var newAccessToken = jwtService.GenerateToken(user, roles);
             var newRefreshToken = Guid.NewGuid().ToString();
 
-            // refresh token mentiqini burda yaziriq
             await userManager.SetAuthenticationTokenAsync(user, "ApiApp", "RefreshToken", newRefreshToken);
 
-            return Ok(new
+            var authResponse = new AuthResponseDto
             {
                 Token = newAccessToken,
                 RefreshToken = newRefreshToken
-            });
+            };
+
+            return Ok(ApiResponse<AuthResponseDto>.Ok(authResponse, "Token refreshed successfully"));
         }
-
-
-        //[HttpGet]
-        //public async Task<IActionResult> CreateRole()
-        //{
-        //    await roleManager.CreateAsync(new IdentityRole("Member"));
-        //    await roleManager.CreateAsync(new IdentityRole("Admin"));
-
-        //    return Ok();
-        //}
     }
 }

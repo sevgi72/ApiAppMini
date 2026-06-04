@@ -1,16 +1,17 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using FluentValidation; // <-- 500 Swagger xətasını həll etmək üçün mütləqdir!
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Text;
 using WebApplication2;
+using WebApplication2.Common;
 using WebApplication2.Data;
 using WebApplication2.Models;
 using WebApplication2.Profiles;
-using Microsoft.Extensions.Configuration;
-using FluentValidation; // <-- 500 Swagger xətasını həll etmək üçün mütləqdir!
 
 namespace ApiProjectPractise
 {
@@ -92,6 +93,28 @@ namespace ApiProjectPractise
                     ValidAudience = config["Jwt:Audience"],
                     ClockSkew = TimeSpan.Zero,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]))
+                };
+
+                // ✅ 401 və 403 cavablarını ApiResponse formatına salır
+                options.Events = new JwtBearerEvents
+                {
+                    OnChallenge = async context =>
+                    {
+                        context.HandleResponse(); // default boş 401-i blokla
+                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        context.Response.ContentType = "application/json";
+
+                        var response = ApiResponse<object>.Fail("You are not authorized. Please login.");
+                        await context.Response.WriteAsJsonAsync(response);
+                    },
+                    OnForbidden = async context =>
+                    {
+                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        context.Response.ContentType = "application/json";
+
+                        var response = ApiResponse<object>.Fail("You do not have permission to access this resource.");
+                        await context.Response.WriteAsJsonAsync(response);
+                    }
                 };
             });
 
