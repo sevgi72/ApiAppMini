@@ -301,4 +301,6 @@ C:\Users\PC\OneDrive\Desktop\WebApplicationApi\WebApplication2\bin\Debug\net8.0\
 C:\Users\PC\OneDrive\Desktop\WebApplicationApi\WebApplication2\bin\Debug\net8.0\xunit.assert.dll
 C:\Users\PC\OneDrive\Desktop\WebApplicationApi\WebApplication2\bin\Debug\net8.0\xunit.core.dll
 C:\Users\PC\OneDrive\Desktop\WebApplicationApi\WebApplication2\bin\Debug\net8.0\xunit.execution.dotnet.dll
+C:\Users\PC\OneDrive\Desktop\WebApplicationApi\WebApplication2\bin\Debug\net8.0\Npgsql.dll
+C:\Users\PC\OneDrive\Desktop\WebApplicationApi\WebApplication2\bin\Debug\net8.0\Npgsql.EntityFrameworkCore.PostgreSQL.dll
 C:\Users\PC\OneDrive\Desktop\WebApplicationApi\WebApplication2\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt

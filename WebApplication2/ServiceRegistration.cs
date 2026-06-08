@@ -22,7 +22,7 @@ namespace ApiProjectPractise
             services.AddControllers();
 
             services.AddDbContext<ApiAppDbContext>(options =>
-                options.UseSqlServer(config.GetConnectionString("DefaultConnection")));
+                options.UseNpgsql(config.GetConnectionString("DefaultConnection")));
 
             services.AddHttpContextAccessor();
             services.AddAutoMapper(opt => opt.AddProfile(new MapperProfile(new HttpContextAccessor())));
