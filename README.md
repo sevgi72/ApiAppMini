@@ -472,6 +472,3 @@ Database Entities:        3
 DTOs:                    9
 ```
 
----
-
-**🚀 Ready to develop! Get started now.**
