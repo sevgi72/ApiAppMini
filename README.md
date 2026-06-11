@@ -15,7 +15,7 @@ A comprehensive ASP.NET Core Web API for managing events, organizers, and ticket
 
 ---
 
-## 🏗️ Solution Structure
+ 🏗️ Solution Structure
 
 ```
 WebApplication2.sln
